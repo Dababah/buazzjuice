@@ -18,6 +18,7 @@ const hankenGrotesk = Hanken_Grotesk({
 })
 
 export const metadata: Metadata = {
+  metadataBase: new URL(process.env.NEXT_PUBLIC_BASE_URL || 'https://buazzjuice.vercel.app'),
   title: {
     default: 'BUAZZZ JUICE | Kesegaran Tanpa Manipulasi',
     template: '%s | BUAZZZ JUICE',

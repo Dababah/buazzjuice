@@ -7,7 +7,14 @@ import OpenAI from 'openai'
 import { prisma } from '@/lib/prisma'
 import { formatRupiah } from '@/lib/helpers'
 
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
+let openai: OpenAI | null = null
+
+function getOpenAI(): OpenAI {
+  if (!openai) {
+    openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
+  }
+  return openai
+}
 
 const FUNCTIONS = [
   {
@@ -181,7 +188,7 @@ export async function POST(req: NextRequest) {
 
     let completion
     try {
-      completion = await openai.chat.completions.create({
+      completion = await getOpenAI().chat.completions.create({
         model: 'gpt-3.5-turbo',
         messages: [
           {

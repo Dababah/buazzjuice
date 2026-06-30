@@ -11,10 +11,12 @@ import ConsumerFooter from '@/components/consumer/ConsumerFooter'
 import CartBar from '@/components/consumer/CartBar'
 
 async function getProducts() {
-  return prisma.product.findMany({
+  const products = await prisma.product.findMany({
     where: { isAvailable: true },
     orderBy: [{ category: 'asc' }, { name: 'asc' }],
   })
+  // Serialize Decimal → number so it matches our Product type & is safe for Client Components
+  return JSON.parse(JSON.stringify(products)) as import('@/types').Product[]
 }
 
 export default async function HomePage() {
