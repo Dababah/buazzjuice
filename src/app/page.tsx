@@ -10,6 +10,8 @@ import LocationSection from '@/components/consumer/LocationSection'
 import ConsumerFooter from '@/components/consumer/ConsumerFooter'
 import CartBar from '@/components/consumer/CartBar'
 
+export const dynamic = 'force-dynamic'
+
 async function getProducts() {
   const products = await prisma.product.findMany({
     where: { isAvailable: true },
