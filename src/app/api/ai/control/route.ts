@@ -1,31 +1,33 @@
 // src/app/api/ai/control/route.ts
-// AI Copilot — natural language → DB actions via OpenAI function calling
+// AI Copilot — natural language → DB actions via Gemini function calling
 // Supports: konsinyasi recap, sales summary, stock check
 
 import { NextRequest, NextResponse } from 'next/server'
-import OpenAI from 'openai'
+import { GoogleGenerativeAI, SchemaType, FunctionDeclaration } from '@google/generative-ai'
 import { prisma } from '@/lib/prisma'
 import { formatRupiah } from '@/lib/helpers'
 
-let openai: OpenAI | null = null
+export const dynamic = 'force-dynamic'
 
-function getOpenAI(): OpenAI {
-  if (!openai) {
-    openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
+let genAI: GoogleGenerativeAI | null = null
+
+function getGemini(): GoogleGenerativeAI {
+  if (!genAI) {
+    genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!)
   }
-  return openai
+  return genAI
 }
 
-const FUNCTIONS = [
+const FUNCTIONS: FunctionDeclaration[] = [
   {
     name: 'recapConsignmentStock',
     description: 'Merekap hasil konsinyasi dari warung mitra. Dipanggil ketika admin melaporkan hasil penjualan titip barang.',
     parameters: {
-      type: 'object',
+      type: SchemaType.OBJECT,
       properties: {
-        storeName: { type: 'string', description: 'Nama warung atau toko mitra' },
-        qtySold: { type: 'number', description: 'Jumlah botol yang terjual' },
-        qtyReturned: { type: 'number', description: 'Jumlah botol yang dikembalikan' },
+        storeName: { type: SchemaType.STRING, description: 'Nama warung atau toko mitra' },
+        qtySold: { type: SchemaType.NUMBER, description: 'Jumlah botol yang terjual' },
+        qtyReturned: { type: SchemaType.NUMBER, description: 'Jumlah botol yang dikembalikan' },
       },
       required: ['storeName', 'qtySold'],
     },
@@ -34,9 +36,13 @@ const FUNCTIONS = [
     name: 'getSalesSummary',
     description: 'Mendapatkan ringkasan penjualan untuk periode tertentu.',
     parameters: {
-      type: 'object',
+      type: SchemaType.OBJECT,
       properties: {
-        period: { type: 'string', enum: ['today', 'yesterday', 'this_week', 'this_month'] },
+        period: {
+          type: SchemaType.STRING,
+          description: 'Periode: today, yesterday, this_week, atau this_month',
+          enum: ['today', 'yesterday', 'this_week', 'this_month'],
+        },
       },
       required: ['period'],
     },
@@ -45,9 +51,9 @@ const FUNCTIONS = [
     name: 'getLowStockAlert',
     description: 'Mendapatkan daftar produk yang stoknya kritis.',
     parameters: {
-      type: 'object',
+      type: SchemaType.OBJECT,
       properties: {
-        threshold: { type: 'number', description: 'Batas stok kritis, default 10' },
+        threshold: { type: SchemaType.NUMBER, description: 'Batas stok kritis, default 10' },
       },
     },
   },
@@ -179,42 +185,40 @@ export async function POST(req: NextRequest) {
     const { prompt } = await req.json()
     if (!prompt?.trim()) return NextResponse.json({ success: false, error: 'Prompt kosong' }, { status: 400 })
 
-    if (!process.env.OPENAI_API_KEY) {
-      return NextResponse.json({ success: false, error: '⚙️ OPENAI_API_KEY belum dikonfigurasi. Tambahkan ke .env.local' }, { status: 503 })
+    if (!process.env.GEMINI_API_KEY) {
+      return NextResponse.json({ success: false, error: '⚙️ GEMINI_API_KEY belum dikonfigurasi di environment variables.' }, { status: 503 })
     }
+
+    const model = getGemini().getGenerativeModel({
+      model: 'gemini-1.5-flash',
+      tools: [{ functionDeclarations: FUNCTIONS }],
+      systemInstruction:
+        'Kamu adalah asisten admin untuk bisnis jus buah BUAZZZ JUICE di Yogyakarta, Indonesia. Bantu admin rekap konsinyasi, cek penjualan, dan pantau stok. Selalu gunakan function call yang tersedia kalau relevan. Jawab singkat dalam Bahasa Indonesia.',
+    })
 
     const controller = new AbortController()
     const timeout = setTimeout(() => controller.abort(), 12000)
 
-    let completion
+    let result
     try {
-      completion = await getOpenAI().chat.completions.create({
-        model: 'gpt-3.5-turbo',
-        messages: [
-          {
-            role: 'system',
-            content: 'Kamu adalah asisten admin untuk bisnis jus buah BUAZZZ JUICE di Yogyakarta, Indonesia. Bantu admin rekap konsinyasi, cek penjualan, dan pantau stok. Selalu gunakan function call yang tersedia. Jawab singkat dalam Bahasa Indonesia.',
-          },
-          { role: 'user', content: prompt },
-        ],
-        tools: FUNCTIONS.map((f) => ({ type: 'function' as const, function: f })),
-        tool_choice: 'auto',
-      })
+      result = await model.generateContent(prompt, { signal: controller.signal } as any)
     } finally {
       clearTimeout(timeout)
     }
 
-    const message = completion.choices[0]?.message
-    const toolCall = message?.tool_calls?.[0]
+    const response = result.response
+    const functionCalls = response.functionCalls()
 
-    if (!toolCall) {
-      return NextResponse.json({ success: true, message: message?.content || 'Tidak dapat memproses permintaan.' })
+    if (!functionCalls || functionCalls.length === 0) {
+      const textContent = response.text() || 'Tidak dapat memproses permintaan.'
+      return NextResponse.json({ success: true, message: textContent })
     }
 
-    const fnName = toolCall.function.name
-    const args = JSON.parse(toolCall.function.arguments)
+    const call = functionCalls[0]
+    const fnName = call.name
+    const args = call.args as Record<string, any>
 
-    let result: string
+    let resultText: string
 
     switch (fnName) {
       case 'recapConsignmentStock': {
@@ -222,16 +226,16 @@ export async function POST(req: NextRequest) {
         return NextResponse.json(recapResult)
       }
       case 'getSalesSummary':
-        result = await getSalesSummary(args.period || 'today')
+        resultText = await getSalesSummary(args.period || 'today')
         break
       case 'getLowStockAlert':
-        result = await getLowStock(args.threshold || 10)
+        resultText = await getLowStock(args.threshold || 10)
         break
       default:
-        result = 'Fungsi tidak dikenali.'
+        resultText = 'Fungsi tidak dikenali.'
     }
 
-    return NextResponse.json({ success: true, message: result })
+    return NextResponse.json({ success: true, message: resultText })
   } catch (error) {
     const msg = error instanceof Error ? error.message : 'Internal server error'
     console.error('AI control error:', error)
