@@ -17,8 +17,11 @@ async function verifyJWT(token: string): Promise<boolean> {
 
     const [headerB64, payloadB64, signatureB64] = parts
 
+    // Pad base64 strings before atob
+    const pad = (str: string) => str.padEnd(str.length + (4 - str.length % 4) % 4, '=');
+    
     // Decode and verify expiry from payload
-    const payloadJson = atob(payloadB64.replace(/-/g, '+').replace(/_/g, '/'))
+    const payloadJson = atob(pad(payloadB64.replace(/-/g, '+').replace(/_/g, '/')))
     const payload = JSON.parse(payloadJson)
     if (payload.exp && Date.now() / 1000 > payload.exp) return false
 
@@ -36,12 +39,13 @@ async function verifyJWT(token: string): Promise<boolean> {
     const data = encoder.encode(`${headerB64}.${payloadB64}`)
 
     // Decode base64url signature
-    const signaturePad = signatureB64.replace(/-/g, '+').replace(/_/g, '/')
+    const signaturePad = pad(signatureB64.replace(/-/g, '+').replace(/_/g, '/'))
     const signatureBytes = Uint8Array.from(atob(signaturePad), (c) => c.charCodeAt(0))
 
     const valid = await crypto.subtle.verify('HMAC', cryptoKey, signatureBytes, data)
     return valid
-  } catch {
+  } catch (error) {
+    console.error('JWT Verification Error:', error)
     return false
   }
 }
