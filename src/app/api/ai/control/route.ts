@@ -207,13 +207,13 @@ export async function POST(req: NextRequest) {
     const fnName = toolCall.function.name
     const args = JSON.parse(toolCall.function.arguments)
 
-    let result: string | { success: boolean; message: string }
+    let result: string
 
     switch (fnName) {
-      case 'recapConsignmentStock':
-        result = await recapConsignment(args.storeName, args.qtySold, args.qtyReturned)
-        if (typeof result === 'object') return NextResponse.json(result)
-        break
+      case 'recapConsignmentStock': {
+        const recapResult = await recapConsignment(args.storeName, args.qtySold, args.qtyReturned)
+        return NextResponse.json(recapResult)
+      }
       case 'getSalesSummary':
         result = await getSalesSummary(args.period || 'today')
         break
@@ -224,7 +224,7 @@ export async function POST(req: NextRequest) {
         result = 'Fungsi tidak dikenali.'
     }
 
-    return NextResponse.json({ success: true, message: typeof result === 'string' ? result : result.message })
+    return NextResponse.json({ success: true, message: result })
   } catch (error) {
     const msg = error instanceof Error ? error.message : 'Internal server error'
     console.error('AI control error:', error)
