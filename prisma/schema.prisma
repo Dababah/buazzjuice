@@ -1,0 +1,179 @@
+// prisma/schema.prisma
+// BUAZZZ JUICE - Database Schema Final v2.0
+// Stack: Neon Serverless PostgreSQL
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL") // Required for Neon + Prisma migrations
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+// ─── ENUMS ───────────────────────────────────────────────────────────────────
+
+enum OrderSource {
+  LAPAK_OFFLINE   // Penjualan langsung di lapak/Sunmor
+  WHATSAPP_ONLINE // Order via WA (admin input manual setelah konfirmasi)
+  KONSINYASI      // Hasil rekap warung mitra
+}
+
+enum ConsignmentStatus {
+  ACTIVE   // Barang masih beredar di mitra
+  SETTLED  // Sudah direkap & diselesaikan
+}
+
+enum LogType {
+  STOCK_IN            // Stok masuk (beli bahan, produksi)
+  STOCK_OUT           // Stok keluar manual (rusak, sample, dsb)
+  OPERATIONAL_EXPENSE // Pengeluaran operasional (bensin, es, dll)
+  ADJUSTMENT          // Koreksi stok
+}
+
+enum SugarLevel {
+  NO_SUGAR   // Tanpa gula
+  LESS_SUGAR // Kurang manis
+  NORMAL     // Normal (default)
+}
+
+// ─── MODELS ──────────────────────────────────────────────────────────────────
+
+// Admin user — single admin, PIN-based auth
+model User {
+  id        Int      @id @default(autoincrement())
+  name      String   @db.VarChar(50)
+  pinHash   String   @map("pin_hash") @db.VarChar(255)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("users")
+}
+
+// Brute-force protection untuk login PIN
+model LoginAttempt {
+  id       Int       @id @default(autoincrement())
+  ip       String    @db.VarChar(45)
+  attempts Int       @default(0)
+  lockedAt DateTime? @map("locked_at")
+
+  @@index([ip])
+  @@map("login_attempts")
+}
+
+// Produk jus
+model Product {
+  id           Int      @id @default(autoincrement())
+  name         String   @db.VarChar(100)
+  description  String?  @db.Text
+  price        Decimal  @db.Decimal(10, 2)
+  imageUrl     String?  @map("image_url") @db.VarChar(500)
+  currentStock Int      @default(0) @map("current_stock")
+  lowStockAlert Int     @default(10) @map("low_stock_alert")
+  isAvailable  Boolean  @default(true) @map("is_available")
+  category     String   @default("PURE") @db.VarChar(30) // PURE | SMOOTHIES | MIXOLOGY
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  orderItems        OrderItem[]
+  consignmentStocks ConsignmentStock[]
+
+  @@map("products")
+}
+
+// Order (semua sumber: lapak, WA, konsinyasi)
+model Order {
+  id              String      @id @db.VarChar(50) // Format: BZ-YYYYMMDD-XXXX
+  customerName    String      @default("Pelanggan") @map("customer_name") @db.VarChar(100)
+  totalPrice      Decimal     @map("total_price") @db.Decimal(12, 2)
+  source          OrderSource @default(LAPAK_OFFLINE)
+  paymentMethod   String      @default("CASH") @map("payment_method") @db.VarChar(30) // CASH | QRIS | TRANSFER
+  paymentProofUrl String?     @map("payment_proof_url") @db.VarChar(500) // URL foto bukti QRIS
+  isConfirmed     Boolean     @default(false) @map("is_confirmed")
+  locationTag     String      @default("LAPAK_UTAMA") @map("location_tag") @db.VarChar(100)
+  notes           String?     @db.Text
+  createdAt       DateTime    @default(now()) @map("created_at")
+
+  items OrderItem[]
+
+  @@index([createdAt, locationTag], name: "idx_orders_date_location")
+  @@index([source], name: "idx_orders_source")
+  @@map("orders")
+}
+
+// Item per order
+model OrderItem {
+  id              Int        @id @default(autoincrement())
+  orderId         String     @map("order_id") @db.VarChar(50)
+  productId       Int        @map("product_id")
+  quantity        Int
+  sugarLevel      SugarLevel @default(NORMAL) @map("sugar_level")
+  priceAtPurchase Decimal    @map("price_at_purchase") @db.Decimal(10, 2)
+  subtotal        Decimal    @db.Decimal(10, 2)
+
+  order   Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id])
+
+  @@map("order_items")
+}
+
+// Konsinyasi ke warung mitra
+model ConsignmentStock {
+  id           Int               @id @default(autoincrement())
+  storeName    String            @map("store_name") @db.VarChar(100)
+  storeContact String?           @map("store_contact") @db.VarChar(20) // No WA mitra
+  productId    Int               @map("product_id")
+  qtyConsigned Int               @map("qty_consigned")
+  qtySold      Int               @default(0) @map("qty_sold")
+  qtyReturned  Int               @default(0) @map("qty_returned")
+  pricePerUnit Decimal           @map("price_per_unit") @db.Decimal(10, 2)
+  status       ConsignmentStatus @default(ACTIVE)
+  settledAt    DateTime?         @map("settled_at")
+  createdAt    DateTime          @default(now()) @map("created_at")
+  updatedAt    DateTime          @updatedAt @map("updated_at")
+
+  product Product @relation(fields: [productId], references: [id])
+
+  @@map("consignment_stocks")
+}
+
+// Pengeluaran operasional (terpisah dari inventory log)
+model OperationalExpense {
+  id          Int      @id @default(autoincrement())
+  description String   @db.VarChar(150)
+  amount      Decimal  @db.Decimal(10, 2)
+  receiptUrl  String?  @map("receipt_url") @db.VarChar(500) // Foto nota dari HP
+  locationTag String   @default("LAPAK_UTAMA") @map("location_tag") @db.VarChar(100)
+  category    String   @default("OPERASIONAL") @db.VarChar(50) // BAHAN_BAKU | KEMASAN | TRANSPORT | OPERASIONAL
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@index([createdAt], name: "idx_expenses_date")
+  @@map("operational_expenses")
+}
+
+// Log pergerakan stok (qty-based only)
+model InventoryLog {
+  id              Int      @id @default(autoincrement())
+  itemName        String   @map("item_name") @db.VarChar(100)
+  quantityChanged Int      @map("quantity_changed") // positif = masuk, negatif = keluar
+  type            LogType
+  locationTag     String   @default("LAPAK_UTAMA") @map("location_tag") @db.VarChar(100)
+  notes           String?  @db.Text
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  @@map("inventory_logs")
+}
+
+// Audit trail — semua aksi penting
+model AuditLog {
+  id          Int      @id @default(autoincrement())
+  action      String   @db.VarChar(100)
+  tableName   String   @map("table_name") @db.VarChar(50)
+  isAiAction  Boolean  @default(false) @map("is_ai_action")
+  beforeData  Json?    @map("before_data")
+  afterData   Json?    @map("after_data")
+  description String?  @db.Text
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@map("audit_logs")
+}

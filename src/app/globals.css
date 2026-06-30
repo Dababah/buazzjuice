@@ -1,0 +1,76 @@
+/* src/app/globals.css */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --font-anybody: 'Anybody', sans-serif;
+    --font-hanken: 'Hanken Grotesk', sans-serif;
+  }
+
+  html {
+    scroll-behavior: smooth;
+  }
+
+  body {
+    font-family: var(--font-hanken);
+    background-color: #f8fbe6;
+    color: #191d11;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+}
+
+@layer components {
+  /* ─── Neubrutalism Utilities ─── */
+  .neubrutal-shadow {
+    box-shadow: 6px 6px 0px 0px rgba(0, 0, 0, 1);
+  }
+
+  .neubrutal-shadow-sm {
+    box-shadow: 4px 4px 0px 0px rgba(0, 0, 0, 1);
+  }
+
+  .neubrutal-shadow-lg {
+    box-shadow: 8px 8px 0px 0px rgba(0, 0, 0, 1);
+  }
+
+  .neubrutal-btn {
+    transition: transform 0.1s ease, box-shadow 0.1s ease;
+  }
+
+  .neubrutal-btn:hover {
+    transform: translate(2px, 2px);
+    box-shadow: 2px 2px 0px 0px rgba(0, 0, 0, 1);
+  }
+
+  .neubrutal-btn:active {
+    transform: translate(4px, 4px);
+    box-shadow: 0px 0px 0px 0px rgba(0, 0, 0, 1);
+  }
+
+  /* ─── Organic Blob Mask ─── */
+  .organic-mask {
+    mask-image: url("data:image/svg+xml;utf8,<svg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'><path d='M44.7,-76.4C58.1,-69.2,69.2,-58.1,77.3,-44.7C85.4,-31.3,90.5,-15.7,89.7,-0.5C88.9,14.7,82.1,29.4,73.4,42.8C64.7,56.2,54.1,68.4,40.7,75.9C27.3,83.4,11.1,86.2,-4.5,94C-20.1,101.8,-35.1,114.6,-48.5,110.1C-61.9,105.6,-73.7,83.8,-81.4,65.3C-89.1,46.8,-92.7,31.6,-94.1,16.4C-95.5,1.2,-94.7,-14.1,-89.1,-28.4C-83.5,-42.7,-73.1,-56.1,-60.1,-63.5C-47.1,-70.9,-31.5,-72.3,-17.1,-74.6C-2.7,-76.9,10.5,-80.1,23.8,-81.3C37.1,-82.5,50.4,-81.7,60.8,-74.3Z' transform='translate(100 100)' fill='black' /></svg>");
+    mask-size: cover;
+    -webkit-mask-image: url("data:image/svg+xml;utf8,<svg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'><path d='M44.7,-76.4C58.1,-69.2,69.2,-58.1,77.3,-44.7C85.4,-31.3,90.5,-15.7,89.7,-0.5C88.9,14.7,82.1,29.4,73.4,42.8C64.7,56.2,54.1,68.4,40.7,75.9C27.3,83.4,11.1,86.2,-4.5,94C-20.1,101.8,-35.1,114.6,-48.5,110.1C-61.9,105.6,-73.7,83.8,-81.4,65.3C-89.1,46.8,-92.7,31.6,-94.1,16.4C-95.5,1.2,-94.7,-14.1,-89.1,-28.4C-83.5,-42.7,-73.1,-56.1,-60.1,-63.5C-47.1,-70.9,-31.5,-72.3,-17.1,-74.6C-2.7,-76.9,10.5,-80.1,23.8,-81.3C37.1,-82.5,50.4,-81.7,60.8,-74.3Z' transform='translate(100 100)' fill='black' /></svg>");
+    -webkit-mask-size: cover;
+  }
+
+  /* ─── Scroll hide ─── */
+  .scroll-hide::-webkit-scrollbar {
+    display: none;
+  }
+  .scroll-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+
+  /* ─── Material Symbols ─── */
+  .material-symbols-outlined {
+    font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+    display: inline-block;
+    line-height: 1;
+  }
+}
